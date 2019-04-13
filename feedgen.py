@@ -6,9 +6,10 @@ import urllib3
 import lxml.html
 import re
 import pytz
-from datetime import datetime, timedelta, timezone
 import operator
 import feedgenerator
+
+from datetime import datetime, timedelta, timezone
 
 
 class Feeds:
@@ -52,6 +53,23 @@ feeds = []
 baseurl = 'https://www.trendswatcher.net'
 regexpNS = 'http://exslt.org/regular-expressions'
 f = 0
+
+def to_dict(name):
+    month_dict = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
+                  "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
+    return month_dict[name]
+
+def conv_date(str):
+    check_string = re.match(r'[\d|\.|,| ]+', str)
+    if check_string is None:
+      r = re.match(r'^([a-zA-Z0-9]+)[,|\.| ]+(\d+)[\.|,| ]+(\d+)', str)
+      if r is None:
+        return None
+      if r.lastindex == 3:
+        return [r.group(3), to_dict(r.group(1)[:3]), r.group(2)]
+    else:
+      r = re.match(r'^(\d+)[\.|,| ]+(\d+)[\.|,| ]+(\d+)', str)
+      return [r.group(3), r.group(2), r.group(1)]
 
 ### HEADLINE
 if args[0] == 'debug':
@@ -101,8 +119,12 @@ for k in l:
             feeds[f].pdate = i.text_content()
         for i in dom.xpath('//*[@id="' + k + '"]/p/strong/span'):
             feeds[f].pdate = i.text_content()
-        dlist = re.split(r'\.', feeds[f].pdate)
-        feeds[f].pdate = [dlist[2], dlist[1], dlist[0]]
+        dlist = conv_date(feeds[f].pdate)
+        if dlist is None:
+            feeds[f].pdate = blist
+        else:
+            feeds[f].pdate = dlist
+            blist = dlist
         if '-textwithimage-' in k:
             rk = re.sub('cc-m-textwithimage-(\d+)', r'cc-m-textwithimage-image-\1', k)
             for i in dom.xpath('//img[@id="' + rk + '"]/@src'):
@@ -125,14 +147,6 @@ pattern = r'^cc-m-\d+$'
 
 n = 0
 o = dom.xpath('//*[re:test(@id,"^cc-m-[0-9]+$")]/p[2]/span', namespaces={'re': regexpNS})
-
-month_dict = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "June": "06", "Jul": "07", "Aug": "08",
-              "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
-
-
-def to_dict(name):
-    return month_dict[name]
-
 
 for p in o:
     for q in p.xpath('//@id'):
@@ -166,10 +180,12 @@ for k in l:
             if feeds[f].pdate == "":
                 for i in dom.xpath('//*[@id="' + k + '"]/p/span/span'):
                     feeds[f].pdate = i.text_content()
-            dlist = re.split(r'[\.|,]? ', feeds[f].pdate)
-            if len(dlist[2]) == 4:
-                y = dlist[2]
-            feeds[f].pdate = [str(y), to_dict(dlist[0]), dlist[1]]
+            dlist = conv_date(feeds[f].pdate)
+            if dlist is None:
+                feeds[f].pdate = blist
+            else:
+                feeds[f].pdate = dlist
+                blist = dlist
             f = f + 1
         break
 
@@ -201,7 +217,7 @@ for s in feeds:
     )
 
 fe.content_type = 'application/atom+xml'
-# print (fe.writeString('utf-8'))
 fp = open('atom.xml', 'w')
 fe.write(fp, 'utf-8')
 fp.close()
+
